@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Password-protected Google Drive JSON editor">
+  <title>JSON editor</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">GOOGLE DRIVE</p>
+        <h1>JSON editor</h1>
+        <p class="subhead">Edit and save the shared JSON document.</p>
+      </div>
+      <span id="connection" class="status" aria-live="polite">Not connected</span>
+    </header>
+
+    <section id="login-panel" class="panel login-panel">
+      <h2>Sign in to edit</h2>
+      <p>Enter the editor password to access the document.</p>
+      <form id="login-form">
+        <label for="password">Editor password</label>
+        <div class="password-row">
+          <input id="password" name="password" type="password" autocomplete="current-password" required>
+          <button class="primary" type="submit">Continue</button>
+        </div>
+      </form>
+      <p id="login-message" class="message" role="alert"></p>
+    </section>
+
+    <section id="editor-panel" class="panel" hidden>
+      <div class="toolbar">
+        <div>
+          <h2>Document</h2>
+          <p class="muted">Changes are saved to the original Google Drive file.</p>
+        </div>
+        <button id="logout-button" class="secondary" type="button">Sign out</button>
+      </div>
+      <label for="json-editor">JSON content</label>
+      <textarea id="json-editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="editor-help"></textarea>
+      <div class="editor-footer">
+        <span id="editor-help" class="muted">Valid JSON is required before saving.</span>
+        <span id="validation" class="validation" aria-live="polite"></span>
+      </div>
+      <div class="actions">
+        <button id="reload-button" class="secondary" type="button">Reload from Drive</button>
+        <button id="format-button" class="secondary" type="button">Format JSON</button>
+        <button id="save-button" class="primary" type="button">Back up &amp; save</button>
+      </div>
+      <p id="editor-message" class="message" role="status"></p>
+      <p id="last-saved" class="muted"></p>
+      <p class="notice">A backup copy is created in Google Drive before each save. If backup creation fails, the save is cancelled.</p>
+    </section>
+
+    <footer>Access is password-protected. Do not put confidential data in a publicly accessible repository.</footer>
+  </main>
+</body>
+</html>
