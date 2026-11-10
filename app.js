@@ -2,7 +2,7 @@
  * Set API_BASE to your deployed Cloudflare Worker URL.
  * Example: https://my-json-editor-api.your-subdomain.workers.dev
  */
-const API_BASE = "https://REPLACE-WITH-YOUR-WORKER.workers.dev";
+const API_BASE = "https://google-drive-json-editor-api.laurencengankem.workers.dev";
 
 const $ = (id) => document.getElementById(id);
 const loginPanel = $("login-panel");
