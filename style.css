@@ -493,3 +493,29 @@ footer {
     align-items: flex-start;
   }
 }
+
+
+.actions-column {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.delete-button {
+  padding: 8px 10px;
+  border: 1px solid #f3caca;
+  border-radius: 8px;
+  background: #fff1f1;
+  color: #b42323;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.delete-button:hover {
+  background: #ffe0e0;
+}
+
+.delete-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

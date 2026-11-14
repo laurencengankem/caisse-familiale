@@ -14,6 +14,7 @@ const loginPanel = $("login-panel");
 const dashboardPanel = $("dashboard-panel");
 
 let token = sessionStorage.getItem(TOKEN_KEY) || "";
+
 let documentData = {
   membres: [],
   cotisations: []
@@ -83,6 +84,7 @@ function showLogin() {
 
 function signOut(showMessage = true) {
   token = "";
+
   documentData = {
     membres: [],
     cotisations: []
@@ -166,7 +168,6 @@ async function loadDocument() {
     }
 
     documentData = result.data;
-
     currentPage = 1;
 
     renderDashboard();
@@ -294,7 +295,7 @@ function renderContributions() {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
 
-    cell.colSpan = 4;
+    cell.colSpan = 5;
     cell.className = "empty-state";
     cell.textContent = "Aucune cotisation enregistrée.";
 
@@ -322,11 +323,28 @@ function renderContributions() {
         Number(contribution.somme) || 0
       );
 
+      // Delete action
+      const actionsCell = document.createElement("td");
+      actionsCell.className = "actions-column";
+
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "delete-button";
+      deleteButton.textContent = "🗑️ Supprimer";
+      deleteButton.disabled = isSaving;
+
+      deleteButton.addEventListener("click", () => {
+        deleteContribution(contribution.id);
+      });
+
+      actionsCell.appendChild(deleteButton);
+
       row.append(
         dateCell,
         memberCell,
         idCell,
-        amountCell
+        amountCell,
+        actionsCell
       );
 
       tbody.appendChild(row);
@@ -357,6 +375,131 @@ async function saveDocument(data) {
 }
 
 /* =========================
+   DELETE CONTRIBUTION
+========================= */
+
+async function deleteContribution(id) {
+  if (isSaving) return;
+
+  const contribution = documentData.cotisations.find(
+    (item) => String(item.id) === String(id)
+  );
+
+  if (!contribution) {
+    setMessage(
+      "editor-message",
+      "Cette cotisation est introuvable.",
+      "error"
+    );
+    return;
+  }
+
+  const memberName = getMemberName(contribution.membreId);
+  const date = formatDate(contribution.date);
+  const amount = formatMoney(Number(contribution.somme) || 0);
+
+  // First confirmation
+  const confirmed = window.confirm(
+    "ATTENTION : vous êtes sur le point de supprimer une cotisation.\n\n" +
+    `Membre : ${memberName}\n` +
+    `Date : ${date}\n` +
+    `Montant : ${amount}\n\n` +
+    "Une sauvegarde du fichier sera créée sur Google Drive avant la modification.\n\n" +
+    "Voulez-vous vraiment continuer ?"
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  const updatedCotisations = documentData.cotisations.filter(
+    (item) => String(item.id) !== String(id)
+  );
+
+  if (updatedCotisations.length === documentData.cotisations.length) {
+    setMessage(
+      "editor-message",
+      "Aucune cotisation n'a été supprimée.",
+      "error"
+    );
+    return;
+  }
+
+  const updatedData = {
+    ...documentData,
+    cotisations: updatedCotisations
+  };
+
+  const reloadButton = $("reload-button");
+  const addButton = $("add-button");
+
+  isSaving = true;
+
+  reloadButton.disabled = true;
+
+  if (addButton) {
+    addButton.disabled = true;
+  }
+
+  renderContributions();
+
+  setMessage(
+    "editor-message",
+    "Suppression en cours : création de la sauvegarde et mise à jour de Google Drive..."
+  );
+
+  try {
+    // The Worker creates a backup before updating the original file.
+    const result = await saveDocument(updatedData);
+
+    // Update local data only after successful Drive save.
+    documentData = updatedData;
+
+    const totalPages = Math.max(
+      1,
+      Math.ceil(documentData.cotisations.length / PAGE_SIZE)
+    );
+
+    currentPage = Math.min(currentPage, totalPages);
+
+    renderDashboard();
+
+    $("last-saved").textContent =
+      `Enregistré le ${new Date().toLocaleString("fr-FR")}`;
+
+    setMessage(
+      "editor-message",
+      result.backupName
+        ? `Cotisation supprimée. Sauvegarde créée : ${result.backupName}`
+        : "Cotisation supprimée avec succès.",
+      "success"
+    );
+
+    setStatus("Enregistré", "ok");
+
+  } catch (error) {
+    setMessage(
+      "editor-message",
+      `La suppression a échoué : ${error.message}`,
+      "error"
+    );
+
+    setStatus("Échec de suppression", "error");
+
+  } finally {
+    isSaving = false;
+
+    reloadButton.disabled = false;
+
+    if (addButton) {
+      addButton.disabled = false;
+    }
+
+    renderContributions();
+  }
+}
+
+/* =========================
    ADD CONTRIBUTION
 ========================= */
 
@@ -371,7 +514,12 @@ $("contribution-form").addEventListener(
     const date = $("contribution-date").value;
     const amount = Number($("contribution-amount").value);
 
-    if (!memberIdValue || !date || !Number.isFinite(amount) || amount <= 0) {
+    if (
+      !memberIdValue ||
+      !date ||
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
       setMessage(
         "editor-message",
         "Veuillez remplir correctement tous les champs.",
@@ -425,6 +573,8 @@ $("contribution-form").addEventListener(
 
     addButton.textContent = "Sauvegarde en cours...";
 
+    renderContributions();
+
     setMessage(
       "editor-message",
       "Création de la sauvegarde et enregistrement sur Google Drive..."
@@ -434,8 +584,6 @@ $("contribution-form").addEventListener(
       const result = await saveDocument(updatedData);
 
       documentData = updatedData;
-
-      // Go to the page containing the newest contribution.
       currentPage = 1;
 
       renderDashboard();
@@ -470,6 +618,8 @@ $("contribution-form").addEventListener(
       addButton.disabled = false;
       reloadButton.disabled = false;
       addButton.textContent = "+ Enregistrer la cotisation";
+
+      renderContributions();
     }
   }
 );
