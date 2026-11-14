@@ -112,7 +112,7 @@ function formatMoney(amount) {
 
   return number
     .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " FCFA";
+    .replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " FCFA";
 }
 
 function formatDate(date) {
