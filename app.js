@@ -108,7 +108,7 @@ function signOut(showMessage = true) {
 ========================= */
 
 function formatMoney(amount) {
-  return new Intl.NumberFormat("fr-FR", {
+  return new Intl.NumberFormat("de-DE", {
     maximumFractionDigits: 0
   }).format(amount) + " FCFA";
 }
