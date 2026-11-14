@@ -1,30 +1,49 @@
+
 /*
- * Set API_BASE to your deployed Cloudflare Worker URL.
- * Example: https://my-json-editor-api.your-subdomain.workers.dev
+ * Cloudflare Worker URL
  */
-const API_BASE = "https://google-drive-json-editor-api.laurencengankem.workers.dev";
+const API_BASE =
+  "https://google-drive-json-editor-api.laurencengankem.workers.dev";
+
+const TOKEN_KEY = "json_editor_session";
+const PAGE_SIZE = 10;
 
 const $ = (id) => document.getElementById(id);
+
 const loginPanel = $("login-panel");
-const editorPanel = $("editor-panel");
-const editor = $("json-editor");
-const TOKEN_KEY = "json_editor_session";
+const dashboardPanel = $("dashboard-panel");
 
 let token = sessionStorage.getItem(TOKEN_KEY) || "";
+let documentData = {
+  membres: [],
+  cotisations: []
+};
+
+let currentPage = 1;
+let isSaving = false;
+
+/* =========================
+   GENERAL HELPERS
+========================= */
 
 function setStatus(text, kind = "") {
   const el = $("connection");
   el.textContent = text;
   el.className = `status ${kind}`;
 }
+
 function setMessage(id, text, kind = "") {
   const el = $(id);
   el.textContent = text;
   el.className = `message ${kind}`;
 }
+
 function authHeaders() {
-  return { "Authorization": `Bearer ${token}` };
+  return {
+    Authorization: `Bearer ${token}`
+  };
 }
+
 async function api(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -33,132 +52,554 @@ async function api(path, options = {}) {
       ...(token ? authHeaders() : {})
     }
   });
+
   const payload = await response.json().catch(() => ({}));
+
   if (response.status === 401) {
     signOut(false);
-    throw new Error(payload.error || "Your session expired. Please sign in again.");
+    throw new Error(
+      payload.error || "Session expirée. Veuillez vous reconnecter."
+    );
   }
-  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status})`);
+
+  if (!response.ok) {
+    throw new Error(
+      payload.error || `Erreur HTTP ${response.status}`
+    );
+  }
+
   return payload;
 }
-function showEditor() {
+
+function showDashboard() {
   loginPanel.hidden = true;
-  editorPanel.hidden = false;
+  dashboardPanel.hidden = false;
 }
+
 function showLogin() {
   loginPanel.hidden = false;
-  editorPanel.hidden = true;
+  dashboardPanel.hidden = true;
 }
+
 function signOut(showMessage = true) {
   token = "";
+  documentData = {
+    membres: [],
+    cotisations: []
+  };
+
   sessionStorage.removeItem(TOKEN_KEY);
-  editor.value = "";
+
   showLogin();
-  setStatus("Signed out");
-  if (showMessage) setMessage("login-message", "You have been signed out.");
+  setStatus("Non connecté");
+
+  if (showMessage) {
+    setMessage(
+      "login-message",
+      "Vous avez été déconnecté."
+    );
+  }
 }
+
+/* =========================
+   FORMATTING
+========================= */
+
+function formatMoney(amount) {
+  return new Intl.NumberFormat("fr-FR", {
+    maximumFractionDigits: 0
+  }).format(amount) + " FCFA";
+}
+
+function formatDate(date) {
+  if (!date) return "—";
+
+  const parsed = new Date(`${date}T00:00:00`);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return date;
+  }
+
+  return new Intl.DateTimeFormat("fr-FR").format(parsed);
+}
+
+function getMemberName(memberId) {
+  const member = documentData.membres.find(
+    (m) => String(m.id) === String(memberId)
+  );
+
+  return member ? member.nom : "Membre inconnu";
+}
+
+function getSortedContributions() {
+  return [...documentData.cotisations].sort((a, b) => {
+    const dateComparison = String(b.date || "")
+      .localeCompare(String(a.date || ""));
+
+    if (dateComparison !== 0) {
+      return dateComparison;
+    }
+
+    return Number(b.id || 0) - Number(a.id || 0);
+  });
+}
+
+/* =========================
+   LOAD DOCUMENT
+========================= */
+
 async function loadDocument() {
-  $("reload-button").disabled = true;
-  setMessage("editor-message", "Loading from Google Drive…");
+  const reloadButton = $("reload-button");
+
+  reloadButton.disabled = true;
+  setMessage("editor-message", "Chargement des données...");
+
   try {
     const result = await api("/api/json");
-    editor.value = JSON.stringify(result.data, null, 2);
+
+    if (
+      !result.data ||
+      !Array.isArray(result.data.membres) ||
+      !Array.isArray(result.data.cotisations)
+    ) {
+      throw new Error("Le format du document JSON est incorrect.");
+    }
+
+    documentData = result.data;
+
+    currentPage = 1;
+
+    renderDashboard();
+
     $("last-saved").textContent = result.modifiedTime
-      ? `Drive file last modified: ${new Date(result.modifiedTime).toLocaleString()}`
+      ? `Dernière modification sur Drive : ${
+          new Date(result.modifiedTime).toLocaleString("fr-FR")
+        }`
       : "";
-    setMessage("editor-message", "Document loaded.", "success");
-    setStatus("Connected", "ok");
-    validateEditor();
-  } catch (error) {
-    setMessage("editor-message", error.message, "error");
-    setStatus("Connection error", "error");
-  } finally {
-    $("reload-button").disabled = false;
-  }
-}
-function validateEditor() {
-  try {
-    JSON.parse(editor.value);
-    $("validation").textContent = "Valid JSON";
-    $("validation").className = "validation good";
-    $("save-button").disabled = false;
-    return true;
-  } catch (error) {
-    $("validation").textContent = error.message;
-    $("validation").className = "validation bad";
-    $("save-button").disabled = true;
-    return false;
-  }
-}
 
-$("login-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const password = $("password").value;
-  const button = event.submitter;
-  button.disabled = true;
-  setMessage("login-message", "Checking password…");
-  try {
-    const response = await fetch(`${API_BASE}/api/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password })
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.error || "Unable to sign in.");
-    token = result.token;
-    sessionStorage.setItem(TOKEN_KEY, token);
-    $("password").value = "";
-    showEditor();
-    await loadDocument();
-  } catch (error) {
-    setMessage("login-message", error.message, "error");
-    setStatus("Not connected");
-  } finally {
-    button.disabled = false;
-  }
-});
-
-$("logout-button").addEventListener("click", () => signOut());
-$("reload-button").addEventListener("click", loadDocument);
-$("format-button").addEventListener("click", () => {
-  if (!validateEditor()) return;
-  editor.value = JSON.stringify(JSON.parse(editor.value), null, 2);
-  validateEditor();
-  setMessage("editor-message", "JSON formatted. Remember to save your changes.");
-});
-editor.addEventListener("input", validateEditor);
-
-$("save-button").addEventListener("click", async () => {
-  if (!validateEditor()) return;
-  const saveButton = $("save-button");
-  saveButton.disabled = true;
-  setMessage("editor-message", "Creating backup and saving…");
-  try {
-    const data = JSON.parse(editor.value);
-    const result = await api("/api/json", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data })
-    });
     setMessage(
       "editor-message",
-      `Saved successfully. Backup: ${result.backupName}`,
+      "Données chargées avec succès.",
       "success"
     );
-    $("last-saved").textContent = `Saved: ${new Date().toLocaleString()}`;
-    setStatus("Saved", "ok");
+
+    setStatus("Connecté", "ok");
+
   } catch (error) {
     setMessage("editor-message", error.message, "error");
-    setStatus("Save failed", "error");
+    setStatus("Erreur de connexion", "error");
+
   } finally {
-    saveButton.disabled = !validateEditor();
+    reloadButton.disabled = false;
+  }
+}
+
+/* =========================
+   RENDER DASHBOARD
+========================= */
+
+function renderDashboard() {
+  renderBalance();
+  renderMemberSelect();
+  renderContributions();
+}
+
+function renderBalance() {
+  const total = documentData.cotisations.reduce(
+    (sum, contribution) => {
+      const amount = Number(contribution.somme);
+
+      return sum + (
+        Number.isFinite(amount) ? amount : 0
+      );
+    },
+    0
+  );
+
+  $("total-balance").textContent = formatMoney(total);
+
+  const contributionCount = documentData.cotisations.length;
+  const memberCount = documentData.membres.length;
+
+  $("contribution-count").textContent =
+    `${contributionCount} cotisation${contributionCount > 1 ? "s" : ""}`;
+
+  $("member-count").textContent =
+    `${memberCount} membre${memberCount > 1 ? "s" : ""}`;
+
+  $("history-count").textContent =
+    `${contributionCount} entrée${contributionCount > 1 ? "s" : ""}`;
+}
+
+/* =========================
+   MEMBER SELECT
+========================= */
+
+function renderMemberSelect() {
+  const select = $("contribution-member");
+  const previousValue = select.value;
+
+  select.replaceChildren();
+
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = "Choisir un membre";
+
+  select.appendChild(defaultOption);
+
+  documentData.membres.forEach((member) => {
+    const option = document.createElement("option");
+
+    option.value = String(member.id);
+    option.textContent = member.nom;
+
+    select.appendChild(option);
+  });
+
+  if (
+    documentData.membres.some(
+      (member) => String(member.id) === previousValue
+    )
+  ) {
+    select.value = previousValue;
+  }
+}
+
+/* =========================
+   CONTRIBUTION TABLE
+========================= */
+
+function renderContributions() {
+  const tbody = $("contributions-table");
+
+  tbody.replaceChildren();
+
+  const contributions = getSortedContributions();
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(contributions.length / PAGE_SIZE)
+  );
+
+  currentPage = Math.min(currentPage, totalPages);
+
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+
+  const pageItems = contributions.slice(
+    startIndex,
+    startIndex + PAGE_SIZE
+  );
+
+  if (pageItems.length === 0) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+
+    cell.colSpan = 4;
+    cell.className = "empty-state";
+    cell.textContent = "Aucune cotisation enregistrée.";
+
+    row.appendChild(cell);
+    tbody.appendChild(row);
+
+  } else {
+    pageItems.forEach((contribution) => {
+      const row = document.createElement("tr");
+
+      const dateCell = document.createElement("td");
+      dateCell.textContent = formatDate(contribution.date);
+
+      const memberCell = document.createElement("td");
+      memberCell.textContent = getMemberName(
+        contribution.membreId
+      );
+
+      const idCell = document.createElement("td");
+      idCell.textContent = contribution.id ?? "—";
+
+      const amountCell = document.createElement("td");
+      amountCell.className = "amount-column";
+      amountCell.textContent = formatMoney(
+        Number(contribution.somme) || 0
+      );
+
+      row.append(
+        dateCell,
+        memberCell,
+        idCell,
+        amountCell
+      );
+
+      tbody.appendChild(row);
+    });
+  }
+
+  $("pagination-info").textContent =
+    `Page ${currentPage} sur ${totalPages}`;
+
+  $("previous-button").disabled = currentPage <= 1;
+  $("next-button").disabled = currentPage >= totalPages;
+}
+
+/* =========================
+   SAVE DOCUMENT TO DRIVE
+========================= */
+
+async function saveDocument(data) {
+  const result = await api("/api/json", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ data })
+  });
+
+  return result;
+}
+
+/* =========================
+   ADD CONTRIBUTION
+========================= */
+
+$("contribution-form").addEventListener(
+  "submit",
+  async (event) => {
+    event.preventDefault();
+
+    if (isSaving) return;
+
+    const memberIdValue = $("contribution-member").value;
+    const date = $("contribution-date").value;
+    const amount = Number($("contribution-amount").value);
+
+    if (!memberIdValue || !date || !Number.isFinite(amount) || amount <= 0) {
+      setMessage(
+        "editor-message",
+        "Veuillez remplir correctement tous les champs.",
+        "error"
+      );
+      return;
+    }
+
+    const member = documentData.membres.find(
+      (m) => String(m.id) === memberIdValue
+    );
+
+    if (!member) {
+      setMessage(
+        "editor-message",
+        "Le membre sélectionné est introuvable.",
+        "error"
+      );
+      return;
+    }
+
+    const existingIds = documentData.cotisations
+      .map((item) => Number(item.id))
+      .filter((id) => Number.isFinite(id));
+
+    const nextId = existingIds.length
+      ? Math.max(...existingIds) + 1
+      : 0;
+
+    const newContribution = {
+      id: nextId,
+      date,
+      membreId: member.id,
+      somme: amount
+    };
+
+    const updatedData = {
+      ...documentData,
+      cotisations: [
+        ...documentData.cotisations,
+        newContribution
+      ]
+    };
+
+    const addButton = $("add-button");
+    const reloadButton = $("reload-button");
+
+    isSaving = true;
+    addButton.disabled = true;
+    reloadButton.disabled = true;
+
+    addButton.textContent = "Sauvegarde en cours...";
+
+    setMessage(
+      "editor-message",
+      "Création de la sauvegarde et enregistrement sur Google Drive..."
+    );
+
+    try {
+      const result = await saveDocument(updatedData);
+
+      documentData = updatedData;
+
+      // Go to the page containing the newest contribution.
+      currentPage = 1;
+
+      renderDashboard();
+
+      $("contribution-form").reset();
+      setTodayAsDefault();
+
+      $("last-saved").textContent =
+        `Enregistré le ${new Date().toLocaleString("fr-FR")}`;
+
+      setMessage(
+        "editor-message",
+        result.backupName
+          ? `Cotisation enregistrée. Sauvegarde créée : ${result.backupName}`
+          : "Cotisation enregistrée avec succès.",
+        "success"
+      );
+
+      setStatus("Enregistré", "ok");
+
+    } catch (error) {
+      setMessage(
+        "editor-message",
+        error.message,
+        "error"
+      );
+
+      setStatus("Échec de sauvegarde", "error");
+
+    } finally {
+      isSaving = false;
+      addButton.disabled = false;
+      reloadButton.disabled = false;
+      addButton.textContent = "+ Enregistrer la cotisation";
+    }
+  }
+);
+
+/* =========================
+   PAGINATION
+========================= */
+
+$("previous-button").addEventListener("click", () => {
+  if (currentPage > 1) {
+    currentPage--;
+    renderContributions();
   }
 });
 
-// If a tab was refreshed, a still-valid session token can be reused.
+$("next-button").addEventListener("click", () => {
+  const totalPages = Math.max(
+    1,
+    Math.ceil(documentData.cotisations.length / PAGE_SIZE)
+  );
+
+  if (currentPage < totalPages) {
+    currentPage++;
+    renderContributions();
+  }
+});
+
+/* =========================
+   DEFAULT DATE
+========================= */
+
+function setTodayAsDefault() {
+  const now = new Date();
+
+  const localDate = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0")
+  ].join("-");
+
+  $("contribution-date").value = localDate;
+}
+
+/* =========================
+   LOGIN
+========================= */
+
+$("login-form").addEventListener(
+  "submit",
+  async (event) => {
+    event.preventDefault();
+
+    const password = $("password").value;
+    const button = event.submitter;
+
+    button.disabled = true;
+
+    setMessage(
+      "login-message",
+      "Vérification du mot de passe..."
+    );
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/login`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ password })
+        }
+      );
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || "Impossible de se connecter."
+        );
+      }
+
+      token = result.token;
+
+      sessionStorage.setItem(TOKEN_KEY, token);
+
+      $("password").value = "";
+
+      showDashboard();
+
+      await loadDocument();
+
+    } catch (error) {
+      setMessage(
+        "login-message",
+        error.message,
+        "error"
+      );
+
+      setStatus("Non connecté");
+
+    } finally {
+      button.disabled = false;
+    }
+  }
+);
+
+/* =========================
+   BUTTONS
+========================= */
+
+$("logout-button").addEventListener(
+  "click",
+  () => signOut()
+);
+
+$("reload-button").addEventListener(
+  "click",
+  loadDocument
+);
+
+/* =========================
+   INITIALIZATION
+========================= */
+
+setTodayAsDefault();
+
 if (token) {
-  showEditor();
-  loadDocument().catch(() => signOut(false));
+  showDashboard();
+  loadDocument();
 } else {
   showLogin();
 }

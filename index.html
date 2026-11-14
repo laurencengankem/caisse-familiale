@@ -1,62 +1,182 @@
+
 <!doctype html>
-<html lang="en">
+<html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Password-protected Google Drive JSON editor">
-  <title>JSON editor</title>
+  <meta name="description" content="Tableau de bord de gestion de la caisse familiale">
+  <title>Caisse familiale</title>
   <link rel="stylesheet" href="./style.css">
   <script src="./app.js" defer></script>
 </head>
 <body>
   <main class="shell">
+
     <header class="topbar">
       <div>
-        <p class="eyebrow">GOOGLE DRIVE</p>
-        <h1>JSON editor</h1>
-        <p class="subhead">Edit and save the shared JSON document.</p>
+        <p class="eyebrow">GESTION FAMILIALE</p>
+        <h1>Caisse familiale</h1>
+        <p class="subhead">Suivi des cotisations et des contributions.</p>
       </div>
-      <span id="connection" class="status" aria-live="polite">Not connected</span>
+      <span id="connection" class="status">Non connecté</span>
     </header>
 
+    <!-- LOGIN -->
     <section id="login-panel" class="panel login-panel">
-      <h2>Sign in to edit</h2>
-      <p>Enter the editor password to access the document.</p>
+      <div class="login-icon">🔐</div>
+      <h2>Bienvenue</h2>
+      <p>Connectez-vous pour accéder à la caisse familiale.</p>
+
       <form id="login-form">
-        <label for="password">Editor password</label>
+        <label for="password">Mot de passe</label>
         <div class="password-row">
-          <input id="password" name="password" type="password" autocomplete="current-password" required>
-          <button class="primary" type="submit">Continue</button>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            placeholder="Votre mot de passe"
+            required
+          >
+          <button class="primary" type="submit">Se connecter</button>
         </div>
       </form>
+
       <p id="login-message" class="message" role="alert"></p>
     </section>
 
-    <section id="editor-panel" class="panel" hidden>
-      <div class="toolbar">
+    <!-- DASHBOARD -->
+    <section id="dashboard-panel" hidden>
+
+      <div class="dashboard-toolbar">
         <div>
-          <h2>Document</h2>
-          <p class="muted">Changes are saved to the original Google Drive file.</p>
+          <h2>Tableau de bord</h2>
+          <p class="muted">Vue générale de votre caisse.</p>
         </div>
-        <button id="logout-button" class="secondary" type="button">Sign out</button>
+
+        <div class="toolbar-actions">
+          <button id="reload-button" class="secondary" type="button">
+            ↻ Actualiser
+          </button>
+          <button id="logout-button" class="secondary" type="button">
+            Déconnexion
+          </button>
+        </div>
       </div>
-      <label for="json-editor">JSON content</label>
-      <textarea id="json-editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-describedby="editor-help"></textarea>
-      <div class="editor-footer">
-        <span id="editor-help" class="muted">Valid JSON is required before saving.</span>
-        <span id="validation" class="validation" aria-live="polite"></span>
-      </div>
-      <div class="actions">
-        <button id="reload-button" class="secondary" type="button">Reload from Drive</button>
-        <button id="format-button" class="secondary" type="button">Format JSON</button>
-        <button id="save-button" class="primary" type="button">Back up &amp; save</button>
-      </div>
-      <p id="editor-message" class="message" role="status"></p>
-      <p id="last-saved" class="muted"></p>
-      <p class="notice">A backup copy is created in Google Drive before each save. If backup creation fails, the save is cancelled.</p>
+
+      <!-- BALANCE -->
+      <section class="balance-card">
+        <div class="balance-top">
+          <span class="balance-label">SOLDE ACTUEL DE LA CAISSE</span>
+          <span class="balance-icon">₣</span>
+        </div>
+
+        <div id="total-balance" class="balance-amount">0 FCFA</div>
+
+        <div class="balance-bottom">
+          <span id="contribution-count">0 cotisation</span>
+          <span id="member-count">0 membre</span>
+        </div>
+      </section>
+
+      <!-- ADD CONTRIBUTION -->
+      <section class="panel add-panel">
+        <div class="section-heading">
+          <div>
+            <h2>Nouvelle cotisation</h2>
+            <p class="muted">Enregistrer une nouvelle contribution.</p>
+          </div>
+          <span class="add-icon">+</span>
+        </div>
+
+        <form id="contribution-form">
+          <div class="form-grid">
+
+            <div class="form-field">
+              <label for="contribution-member">Membre</label>
+              <select id="contribution-member" required>
+                <option value="">Choisir un membre</option>
+              </select>
+            </div>
+
+            <div class="form-field">
+              <label for="contribution-date">Date</label>
+              <input id="contribution-date" type="date" required>
+            </div>
+
+            <div class="form-field">
+              <label for="contribution-amount">Montant (FCFA)</label>
+              <input
+                id="contribution-amount"
+                type="number"
+                min="1"
+                step="1"
+                placeholder="Ex : 50000"
+                required
+              >
+            </div>
+
+          </div>
+
+          <div class="form-actions">
+            <button id="add-button" class="primary" type="submit">
+              + Enregistrer la cotisation
+            </button>
+          </div>
+        </form>
+
+        <p id="editor-message" class="message" role="status"></p>
+      </section>
+
+      <!-- HISTORY -->
+      <section class="panel history-panel">
+        <div class="section-heading history-heading">
+          <div>
+            <h2>Historique des cotisations</h2>
+            <p class="muted">Les contributions les plus récentes apparaissent en premier.</p>
+          </div>
+          <span id="history-count" class="count-badge">0 entrée</span>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Membre</th>
+                <th>Identifiant</th>
+                <th class="amount-column">Montant</th>
+              </tr>
+            </thead>
+            <tbody id="contributions-table">
+              <tr>
+                <td colspan="4" class="empty-state">Chargement...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination">
+          <span id="pagination-info">Page 1</span>
+          <div class="pagination-buttons">
+            <button id="previous-button" class="secondary" type="button">
+              ← Précédent
+            </button>
+            <button id="next-button" class="secondary" type="button">
+              Suivant →
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <p id="last-saved" class="last-saved"></p>
+
     </section>
 
-    <footer>Access is password-protected. Do not put confidential data in a publicly accessible repository.</footer>
+    <footer>
+      Caisse familiale · Données stockées de manière sécurisée sur Google Drive.
+    </footer>
+
   </main>
 </body>
 </html>
