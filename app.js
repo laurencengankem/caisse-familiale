@@ -108,9 +108,11 @@ function signOut(showMessage = true) {
 ========================= */
 
 function formatMoney(amount) {
-  return new Intl.NumberFormat("de-DE", {
-    maximumFractionDigits: 0
-  }).format(amount) + " FCFA";
+  const number = Math.round(Number(amount) || 0);
+
+  return number
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ".") + " FCFA";
 }
 
 function formatDate(date) {
