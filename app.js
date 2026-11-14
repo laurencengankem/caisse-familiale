@@ -222,7 +222,7 @@ function renderBalance() {
   $("total-balance").textContent = formatMoney(total);
 
   const contributionCount = documentData.cotisations.length;
-  const memberCount = documentData.membres.length;
+  const memberCount = documentData.membres.length -1;
 
   $("contribution-count").textContent =
     `${contributionCount} cotisation${contributionCount > 1 ? "s" : ""}`;
